@@ -7,7 +7,10 @@ from datetime import timedelta
 from time import time
 import pytz
 
-import requests
+import json
+import urllib
+import urllib3
+http = urllib3.PoolManager()
 
 from .Site import Site
 from .Forecast import Forecast
@@ -81,20 +84,20 @@ class Manager(object):
 
     def __call_api(self, path, params=None):
         """
-        Call the datapoint api using the requests module
+        Call the datapoint api using the url3lib module
         """
         if not params:
             params = dict()
         payload = {'key': self.api_key}
         payload.update(params)
-        url = "%s/%s" % (API_URL, path)
-        req = requests.get(url, params=payload)
+        url = "%s/%s?%s" % (API_URL, path, urllib.urlencode(payload))
+        req = http.request('get', url)
         try:
-            data = req.json()
+            data = json.loads(req.data.decode('utf8'))
         except ValueError:
             raise Exception("DataPoint has not returned any data, this could be due to an incorrect API key")
         self.call_response = data
-        if req.status_code != 200:
+        if req.status != 200:
             msg = [data[m] for m in ("message", "error_message", "status") \
                       if m in data][0]
             raise Exception(msg)
