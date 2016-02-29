@@ -9,8 +9,7 @@ import pytz
 
 import json
 import urllib
-import urllib3
-http = urllib3.PoolManager()
+from appengine.api import urlfetch
 
 from .Site import Site
 from .Forecast import Forecast
@@ -23,49 +22,50 @@ DATE_FORMAT = "%Y-%m-%dZ"
 FORECAST_DATE_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 ELEMENTS = {
     "Day":
-        {"U":"U", "V":"V", "W":"W", "T":"Dm", "S":"S", "Pp":"PPd",
-        "H":"Hn", "G":"Gn", "F":"FDm", "D":"D"},
+        {"U": "U", "V": "V", "W": "W", "T": "Dm", "S": "S", "Pp": "PPd",
+         "H": "Hn", "G": "Gn", "F": "FDm", "D": "D"},
     "Night":
-        {"V":"V", "W":"W", "T":"Nm", "S":"S", "Pp":"PPn",
-        "H":"Hm", "G":"Gm", "F":"FNm", "D":"D"},
+        {"V": "V", "W": "W", "T": "Nm", "S": "S", "Pp": "PPn",
+         "H": "Hm", "G": "Gm", "F": "FNm", "D": "D"},
     "Default":
-        {"V":"V", "W":"W", "T":"T", "S":"S", "Pp":"Pp",
-        "H":"H", "G":"G", "F":"F", "D":"D", "U":"U"}
+        {"V": "V", "W": "W", "T": "T", "S": "S", "Pp": "Pp",
+         "H": "H", "G": "G", "F": "F", "D": "D", "U": "U"}
 }
 
 WEATHER_CODES = {
-    "0":"Clear night",
-    "1":"Sunny day",
-    "2":"Partly cloudy (night)",
-    "3":"Partly cloudy (day)",
-    "4":"Not used",
-    "5":"Mist",
-    "6":"Fog",
-    "7":"Cloudy",
-    "8":"Overcast",
-    "9":"Light rain shower (night)",
-    "10":"Light rain shower (day)",
-    "11":"Drizzle",
-    "12":"Light rain",
-    "13":"Heavy rain shower (night)",
-    "14":"Heavy rain shower (day)",
-    "15":"Heavy rain",
-    "16":"Sleet shower (night)",
-    "17":"Sleet shower (day)",
-    "18":"Sleet",
-    "19":"Hail shower (night)",
-    "20":"Hail shower (day)",
-    "21":"Hail",
-    "22":"Light snow shower (night)",
-    "23":"Light snow shower (day)",
-    "24":"Light snow",
-    "25":"Heavy snow shower (night)",
-    "26":"Heavy snow shower (day)",
-    "27":"Heavy snow",
-    "28":"Thunder shower (night)",
-    "29":"Thunder shower (day)",
-    "30":"Thunder"
+    "0": "Clear night",
+    "1": "Sunny day",
+    "2": "Partly cloudy (night)",
+    "3": "Partly cloudy (day)",
+    "4": "Not used",
+    "5": "Mist",
+    "6": "Fog",
+    "7": "Cloudy",
+    "8": "Overcast",
+    "9": "Light rain shower (night)",
+    "10": "Light rain shower (day)",
+    "11": "Drizzle",
+    "12": "Light rain",
+    "13": "Heavy rain shower (night)",
+    "14": "Heavy rain shower (day)",
+    "15": "Heavy rain",
+    "16": "Sleet shower (night)",
+    "17": "Sleet shower (day)",
+    "18": "Sleet",
+    "19": "Hail shower (night)",
+    "20": "Hail shower (day)",
+    "21": "Hail",
+    "22": "Light snow shower (night)",
+    "23": "Light snow shower (day)",
+    "24": "Light snow",
+    "25": "Heavy snow shower (night)",
+    "26": "Heavy snow shower (day)",
+    "27": "Heavy snow",
+    "28": "Thunder shower (night)",
+    "29": "Thunder shower (day)",
+    "30": "Thunder"
 }
+
 
 class Manager(object):
     """
@@ -90,16 +90,16 @@ class Manager(object):
             params = dict()
         payload = {'key': self.api_key}
         payload.update(params)
-        url = "%s/%s?%s" % (API_URL, path, urllib.urlencode(payload))
-        req = http.request('get', url)
+        url = "%s/%s" % (API_URL, path)
+        result = urlfetch.fetch(url=url, payload=urllib.urlencode(payload), method=urlfetch.GET)
         try:
-            data = json.loads(req.data.decode('utf8'))
+            data = json.loads(result.content)
         except ValueError:
             raise Exception("DataPoint has not returned any data, this could be due to an incorrect API key")
         self.call_response = data
-        if req.status != 200:
+        if result.status_code != 200:
             msg = [data[m] for m in ("message", "error_message", "status") \
-                      if m in data][0]
+                   if m in data][0]
             raise Exception(msg)
         return data
 
@@ -200,11 +200,12 @@ class Manager(object):
         A frequency of "3hourly" will return 8 timesteps:
         0, 180, 360 ... 1260 (minutes since midnight UTC)
         """
-        data = self.__call_api(site_id, {"res":frequency})
+        data = self.__call_api(site_id, {"res": frequency})
         params = data['SiteRep']['Wx']['Param']
 
         forecast = Forecast()
-        forecast.data_date = datetime.strptime(data['SiteRep']['DV']['dataDate'], FORECAST_DATE_FORMAT).replace(tzinfo=pytz.UTC)
+        forecast.data_date = datetime.strptime(data['SiteRep']['DV']['dataDate'], FORECAST_DATE_FORMAT).replace(
+            tzinfo=pytz.UTC)
         forecast.continent = data['SiteRep']['DV']['Location']['continent']
         forecast.country = data['SiteRep']['DV']['Location']['country']
         forecast.name = data['SiteRep']['DV']['Location']['name']
